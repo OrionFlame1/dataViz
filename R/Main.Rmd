@@ -1,0 +1,401 @@
+---
+title: "Main"
+output: html_document
+---
+
+# 1. Imports, data loading and initial data inspection
+
+## 1.1 Imports
+
+```{r include=FALSE}
+library(ggplot2)
+library(tidyr)
+library(ggplot2)
+library(viridisLite)
+library(viridis)
+library(dplyr)
+library(sf)
+```
+
+## 1.2 Data Loading and Initial Data Inspection
+
+```{r}
+df_wb = read.csv("wellbeing.csv")
+df_mr = read.csv("material_flow.csv")
+```
+
+```{r}
+head(df_wb)
+```
+
+```{r}
+colnames(df_wb)
+```
+
+```{r}
+head(df_mr)
+```
+
+```{r}
+colnames(df_mr)
+```
+
+```{r}
+find_unit <- function(value) {
+  if (value >= 1e9) {
+    return ("Gt")
+  } else if (value >= 1e6) {
+    return ("Mt")
+  } else if (value >= 1e3) {
+    return ("kt")
+  } else {
+    return ("t")
+  }
+}
+```
+
+```{r}
+fix_years_col <- function(years) {
+  return (paste0("X", as.character(years)))
+}
+```
+
+```{r}
+plot_flow_category <- function(data, flow, category, years, ylabel=FALSE, debug=FALSE) {
+  years_columns <- fix_years_col(years)
+  years_filter <- c("Country", years_columns)  
+  data_filtered <- data %>%
+    filter(Flow.name == flow, Category == category) %>%
+    select(all_of(years_filter)) %>%
+    drop_na()
+  
+  maximum_year <- max(as.numeric(years))
+  max_col <- fix_years_col(as.character(maximum_year))
+  
+  data_filtered <- data_filtered %>%
+    filter(.data[[max_col]] > 0) %>%
+    arrange(desc(.data[[max_col]])) %>%
+    head()
+  
+  if (debug) {
+    print(data_filtered)
+    return()
+  }
+  
+  melted_df <- data_filtered %>%
+    pivot_longer(
+      cols = -Country,
+      names_to = "Year",
+      values_to = "Value"
+    )
+  
+  country_order <- melted_df %>%
+    filter(Year==max_col) %>%
+    arrange(desc(Value)) %>%
+    pull(Country)
+  
+  melted_df <- melted_df %>%
+    mutate(Country=factor(Country, levels=country_order))
+  
+  print(melted_df)
+  ggplot(melted_df, aes(x=Country, y=Value, fill=Year)) +
+      geom_bar(stat="identity", position="dodge") +
+      scale_fill_viridis_d() +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+      xlab("Country") +
+      ylab(if (!isFALSE(ylabel)) ylabel else {
+        max_value <- max(melted_df$Value, na.rm = TRUE)
+        paste0(flow, " (", find_unit(max_value), ")")
+      }) +
+      ggtitle(paste0(flow, " by Country for Selected Years")) +
+      guides(fill = guide_legend(title = "Year"))
+}
+```
+
+## 2. Filtering and cleaning data
+
+### 2.1 Filtering functions
+
+```{r}
+filter_minerals <- function(data, flow_name, category, year = 2023) {
+  year <- fix_years_col(year)
+  data_filtered <- data %>%
+    filter(Category==category, Flow.name==flow_name) %>%
+    select(Country, year) %>%
+    dplyr::rename(c(Minerals=year)) %>%
+    drop_na()
+  
+  return(data_filtered)
+}
+```
+
+```{r}
+filter_wellbeing <- function(data, measure, domain, year = 2023, age = "total", sex = "total", edu = "total") {
+  age <- tolower(age)
+  sex <- tolower(sex)
+  edu <- tolower(edu)
+  
+  age <- paste0(toupper(substr(age, 1, 1)), substr(age, 2, nchar(age)))
+  age <- paste0(toupper(substr(sex, 1, 1)), substr(sex, 2, nchar(sex)))
+  age <- paste0(toupper(substr(edu, 1, 1)), substr(edu, 2, nchar(edu)))
+  
+  if (age == "Mid") {
+    age <- "Middle-aged"
+  }
+  
+  if (edu != "Total") {
+    edu <- paste(edu, "education")
+  }
+  
+  data_filtered <- data %>%
+    filter(
+      Measure == measure,
+      Domain == domain,
+      TIME_PERIOD == year,
+      Age == age,
+      Sex == sex,
+      Education.level == edu
+    )
+  
+  return(data_filtered)
+}
+```
+
+### 2.2 Dropping unused/duplicate columns and rows
+
+```{r}
+remove_rows_from_dataset <- function(rows, df) {
+  df <- df %>% filter(!Country %in% rows)
+  return(df)
+}
+```
+
+```{r}
+remove_columns_from_dataset <- function(columns, df) {
+  columns <- intersect(columns, colnames(df))
+  df <- df %>% select(-all_of(columns))
+  return(df)
+}
+```
+
+```{r}
+rows_to_remove <- c("World", "Asia + Pacific", "North America", "EECCA",
+                    "West Asia", "Africa", "Europe", "Latin America + Caribbean")
+df_mr <- remove_rows_from_dataset(rows_to_remove, df_mr)
+head(df_mr)
+```
+
+```{r}
+columns_to_remove <- c("STRUCTURE", "STRUCTURE_ID", "STRUCTURE_NAME", "ACTION", "MEASURE", "UNIT_MEASURE", "Unit of measure", "AGE", "SEX", "EDUCATION_LEV", "DOMAIN", "Time period", "Observation value", "OBS_STATUS", "UNIT_MULT", "Unit multiplier", "Units", "DECIMALS", "Decimals", "Base period", "BASE_PER")
+df_wb <- remove_columns_from_dataset(columns_to_remove, df_wb)
+head(df_wb)
+```
+
+## 2.3 Check for missing values
+
+```{r}
+missing_per_columns_minerals <- colSums(is.na(df_mr))
+cat("Missing values per column in minerals dataset:\n")
+print(missing_per_columns_minerals[missing_per_columns_minerals > 0])
+```
+
+```{r}
+missing_per_column_wellbeing <- colSums(is.na(df_wb))
+cat("Missing values per column in wellbeing dataset:\n")
+print(missing_per_column_wellbeing[missing_per_column_wellbeing > 0])
+```
+
+## 2.4 Replacing names for correct map plot assignations
+
+```{r}
+df_mr[["Country"]]
+```
+
+```{r}
+replace_country_names <- function(df, name_dict, column="name") {
+  matches <- match(df[[column]], names(name_dict))
+  df[[column]][!is.na(matches)] <- name_dict[matches[!is.na(matches)]]
+  return(df)
+}
+```
+
+```{r}
+country_replacements <- c(
+  "Russian Federation" = "Russia",
+  "Czechia" = "Czech Republic",
+  "Viet Nam" = "Vietnam"
+)
+```
+
+```{r}
+
+df_mr <- replace_country_names(df_mr, country_replacements, column = "Country")
+df_wb <- replace_country_names(df_wb, country_replacements, column = "Reference.area")
+```
+
+## 2.5 Unique values for columns of interest
+
+```{r}
+categories <- unique(df_mr["Category"])
+categories
+```
+
+```{r}
+flows <- unique(df_mr["Flow.name"])
+flows
+```
+
+```{r}
+measures <- unique(df_wb["Measure"])
+measures
+```
+
+```{r}
+domains <- unique(df_wb["Domain"])
+domains
+```
+
+```{r}
+plot_flow_category(df_mr, "Domestic Extraction", "Fossil fuels", c(1970, 1997, 2024))
+```
+
+## 2.6 Map plotting helper functions
+
+```{r}
+plot_map_static <- function(data, year) {
+  # Load shapefile
+  shapefile_path <- "map/ne_110m_admin_0_countries.shp"
+  world <- st_read(shapefile_path, quiet = TRUE)
+  
+  # Merge the data with the shapefile
+  world_data <- world %>%
+    left_join(data, by = c("NAME" = "Country"))
+  
+  # Create the plot
+  ggplot(data = world_data) +
+    geom_sf(aes(fill = year), color = "black", size = 0.2) +
+    scale_fill_distiller(palette = "RdBu", direction = 1, na.value = "gray90") +
+    theme_minimal() +
+    labs(title = "World Map with Values per Country", fill = year) +
+    theme(axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          panel.grid = element_blank())
+}
+```
+
+```{r}
+library(leaflet)
+library(geojsonio)
+library(htmltools)
+
+leaflet() %>% 
+  addTiles(urlTemplate = 'http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
+
+plot_map <- function(data, column = "Minerals", title = "", wh = "100x100") {
+  year <- names(data)[2]
+  geo_json_path <- "map/folium/world-countries.json"
+  
+  geo_json_data <- geojson_read(geo_json_path, what = "sp")
+  
+  dims <- strsplit(wh, "x")[[1]]
+  width <- paste0(dims[1], "%")
+  height <- paste0(dims[2], "%")
+  
+  geo_json_data@data <- geo_json_data@data %>% left_join(data, by = c(name="Country"))
+  
+  pal <- colorNumeric("YlOrRd", domain = geo_json_data@data[[column]], na.color = "transparent")
+  m <- leaflet(geo_json_data) %>%
+       addTiles() %>%
+       addPolygons(
+         fillColor = ~pal(get(column)),
+         weight = 0.3,
+         opacity = 1,
+         color = "black",
+         fillOpacity = 0.7,
+         highlight = highlightOptions(
+           weight = 2, color = "black", fillOpacity = 0.8, bringToFront = TRUE
+         ),
+         label = ~paste0(name, ": ", get(column)),
+         labelOptions = labelOptions(direction = "auto")
+       ) %>%
+       addLegend(pal = pal, values = ~get(column), title = "Value per Country")
+  if (title != "") {
+    title_html <- tags$div(
+      HTML(paste0("<h1 style='position:absolute;z-index:1000;left:40vw'>", title, "</h1>"))
+    )
+    m <- htmlwidgets::prependContent(m, title_html)
+  }
+  
+  m
+}
+```
+
+```{r}
+df_current <- filter_minerals(df_mr, flow_name = "Domestic Extraction", category = "Fossil fuels", year = 2023)
+```
+
+```{r}
+plot_map(df_current, title="Domestic Extraction of Fossil Fuels in 2023")
+```
+
+```{r}
+library(manipulateWidget)
+
+plot_with_slider <- function(data, flow_name, category) {
+  columns_to_ignore <- c("Flow.code", "Flow.unit")
+  df_filtered <- data %>%
+                  select(-one_of(columns_to_ignore)) %>%
+                  filter(Flow.name==flow_name,Category==category)
+  
+  df_melted <- df_filtered %>%
+               pivot_longer(cols = -c("Country", "Category", "Flow.name"), names_to = "Year", values_to = "Value")
+
+  geo_json_path <- "map/folium/world-countries.json"
+  geo_json <- st_read(geo_json_path, quiet=TRUE)
+  
+  geo_countries <- geo_json$name
+  df_melted <- df_melted %>% filter(Country %in% geo_countries)
+  
+  year_columns <- grep("^X\\d{4}$", colnames(df_filtered), value = TRUE)
+  max_year_numeric <- max(as.numeric(sub("X", "", year_columns)))
+  min_year_numeric <- min(as.numeric(sub("X", "", year_columns)))
+  
+  max_val <- max(df_melted$Value, na.rm=TRUE)
+  
+  manipulateWidget(
+    {
+      df_year <- df_melted %>% 
+                 filter(Year==paste0("X", as.character(year)))
+  
+      geo_data <- geo_json %>%
+                  left_join(df_year, by=c(name="Country"))
+      
+      pal <- colorNumeric("YlOrRd", domain = c(0, max_val), na.color = "transparent")
+  
+      leaflet(geo_data) %>%
+        addProviderTiles(providers$CartoDB.Positron) %>%
+        addPolygons(
+          fillColor = ~pal(Value),
+          weight = 1,
+          color = "orange",
+          fillOpacity = ~Value/max_val,
+          label = ~paste(name, ": ", round(Value, 2)),
+          highlight = highlightOptions(
+            weight = 2, color = "#666", fillOpacity = 0.8, bringToFront = TRUE
+          )
+        ) %>%
+        addLegend(pal = pal, values = geo_data$Value, title = paste(category, flow_name, year, " "))
+    },
+    year = mwSlider(min_year_numeric,
+                  max_year_numeric,
+                  step = 1,
+                  value = 2020,
+                  label = "Year")
+  )
+}
+```
+
+```{r}
+plot_with_slider(df_mr, "Domestic Extraction", "Fossil fuels")
+```
