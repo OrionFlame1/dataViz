@@ -143,16 +143,20 @@ filter_minerals <- function(data, flow_name, category, year = 2023) {
 ```{r}
 filter_minerals_generic <- function(data, flow_name="", category="", years=c()) {
   years <- fix_years_col(years)
-  cols_to_select <- c("Country", "Category", "Flow name", years)
-  data <- data %>%
+  cols_to_select <- c("Country", "Category", "Flow.name", years)
+
+  if(length(years) == 1) {
+    data <- data %>%
       filter(Category==category, Flow.name==flow_name) %>%
       select(-one_of(c("Flow.code", "Flow.unit")))
-  if(length(years) == 1) {
     year_str = years[1]
     data <- data %>%
           select(Country, !!year_str) %>%
           rename(c(Minerals=!!year_str))
   } else if(length(years) > 1) {
+    data <- data %>%
+      filter(Category==category, Flow.name==flow_name) %>%
+      select(-one_of(c("Flow.code", "Flow.unit")))
     data <- data %>%
           select(Country, Category, Flow.name, all_of(years)) %>%
           pivot_longer(
@@ -161,6 +165,8 @@ filter_minerals_generic <- function(data, flow_name="", category="", years=c()) 
             values_to="Value"
           )
   } else {
+    data <- data %>%
+          select(-one_of(c("Flow.code", "Flow.unit")))
     data <- data %>%
           pivot_longer(
             cols=-one_of(c("Country", "Category", "Flow.name")),
@@ -489,7 +495,6 @@ plot_wellbeing_with_slider <- function(data, title="") {
 
 ```{r}
 years = c(1970, 1997, 2024)
-df_mr_transposed <- filter_minerals_generic(df_mr)
 ```
 
 ## 3.2 Visualization
@@ -620,10 +625,6 @@ plot_wellbeing_with_slider(df_employment_rate)
 ```
 
 ```{r}
-
-```
-
-```{r}
 plot_with_slider(df_mr, flow_name="Material Footprint (RMC)", category = "Biomass")
 ```
 
@@ -706,16 +707,185 @@ normalize <- function(x) {
   (x - min(x, na.rm=TRUE)) / (max(x, na.rm=TRUE) - min(x, na.rm=TRUE))
 }
 
-df_current <- filter_wellbeing(df_wb, measure="Life satisfaction", domain="Subjective well-being", years=c(2021)) %>%
-  rename(c(Country="Reference.area", Year="TIME_PERIOD", Value="OBS_VALUE"))
+df_current <- filter_wellbeing(df_wb, measure="Life satisfaction", domain="Subjective well-being", years=c(2021))
+
+df_current <- df_current %>%
+        rename(c(Country="Reference.area", Year="TIME_PERIOD", Value="OBS_VALUE"))
+
+annual_earnings_for_merge <- annual_earnings %>%
+    rename(c(Country="Reference.area", Year="TIME_PERIOD", Value="OBS_VALUE"))
 
 merged_df <- df_current %>%
-    inner_join(annual_earnings, by="Country") %>%
-    select(all_of("Country", Value_x=Value.x, Value_y=Value.y))
+    inner_join(annual_earnings_for_merge, by="Country") %>%
+    select(Country, Value_x=Value.x, Value_y=Value.y)
+
+merged_df <- merged_df %>%
+      mutate(
+        `Life Satisfaction (norm)` = normalize(Value_x),
+        `Average Earnings (norm)` = normalize(Value_y)
+      )
+
+merged_df <- merged_df %>%
+          arrange(desc(`Life Satisfaction (norm)`))
+
+country_order <- merged_df %>%
+                arrange(desc(`Life Satisfaction (norm)`)) %>%
+                pull(Country)
+
+plot_df <- merged_df %>%
+        select(Country, `Life Satisfaction (norm)`, `Average Earnings (norm)`) %>%
+        pivot_longer(
+          cols=-Country,
+          names_to="Metric",
+          values_to="Normalized Value"
+        )
+
+avg_life <- mean(merged_df$`Life Satisfaction (norm)`, na.rm=TRUE)
+avg_earn <- mean(merged_df$`Average Earnings (norm)`, na.rm=TRUE)
+
+average_data <- data.frame(
+  Country = c("Average", "Average"),
+  Metric = c("Life Satisfaction (norm)", "Average Earnings (norm)"),
+  `Normalized Value` = c(avg_life, avg_earn)
+)
+
+plot_df <- bind_rows(plot_df, average_data)
+
+plot_df$Country <- factor(plot_df$Country, levels=c(country_order, "Average"))
+
+ggplot(plot_df, aes(x=Country, y=`Normalized Value`, fill=Metric)) +
+      geom_bar(stat="identity", position="dodge") +
+      labs(
+        title="Normalized Life Satisfaction vs Average Earnings by Country",
+        x="Country",
+        y="Normalized Value (0-1)"
+      ) +
+      scale_fill_brewer(palette="Set2") +
+      theme_minimal(base_size=12) +
+      theme(
+        axis.text.x = element_text(angle=45, hjust=1),
+        plot.title = element_text(hjust=0.5)
+      )
 ```
 
-``` r
+```{r}
+df_life_satisfaction_age <- df_wb %>%
+  filter(
+    Measure == "Life satisfaction",
+    Domain == "Subjective well-being",
+    TIME_PERIOD == 2023,
+    Age != "Total"
+  ) %>%
+  select(Reference.area, Age, OBS_VALUE)
+
+df_life_satisfaction_age <- df_life_satisfaction_age %>%
+  arrange(desc(Reference.area), desc(OBS_VALUE))
+
+age_counts <- df_life_satisfaction_age %>%
+  group_by(Reference.area) %>%
+  summarise(n_age = n_distinct(Age), .groups = "drop")
+
+valid_countries <- age_counts %>%
+  filter(n_age == 3) %>%
+  pull(Reference.area)
+
+filtered_df <- df_life_satisfaction_age %>%
+  filter(Reference.area %in% valid_countries)
+
+filtered_df <- filtered_df %>%
+  group_by(Reference.area) %>%
+  mutate(avg_val = mean(OBS_VALUE)) %>%
+  ungroup() %>%
+  mutate(Reference.area = fct_reorder(Reference.area, avg_val)) %>%
+  select(-avg_val)
+
+ggplot(filtered_df, aes(x = Reference.area, y = OBS_VALUE, fill = Age)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(
+    title = "Observed Values by Age Group and Country",
+    x = "Country",
+    y = "Observed Value"
+  ) +
+  scale_fill_brewer(palette = "Set2") +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
 ```
 
-```         
+Observation: Most countries have similar average values across age groups, while Japan has a low average rating of life satisfaction across the 3 age groups, and Bulgaria and Croatia have a similar pattern where the "old" age group have a lower rating on life satisfaction than "young" age group.
+
+## 3.3 Anomalies
+
+```{r}
+df_mr_transposed <- filter_minerals_generic(df_mr)
+df_anomaly <- df_mr_transposed %>%
+  filter(Country == "Russia")
+
+ggplot(df_anomaly, aes(x = Year, y = Value)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(
+    title = "Minerals Activity in Russia (1970–2023)",
+    x = "Year",
+    y = "Minerals (in kt)"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45),
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+Observation: Russian Federation did not report any activity on minerals industry until 1992, this can be related to the collapse of the Soviet Union, along with a descending trend of tonnes, indicating that before the first reports it might have been a greater minerals extraction than reported.
+
+```{r}
+df_romania_ptb <- filter_minerals_generic(df_mr, flow_name = "Physical Trade Balance", year = c()) %>%
+  filter(Country == "Romania")
+
+df_grouped <- df_romania_ptb %>%
+  group_by(Category, Year) %>%
+  summarise(Value = sum(Value, na.rm = TRUE), .groups = "drop")
+
+categories <- unique(df_grouped$Category)
+filtered_list <- list()
+
+for (cat in categories) {
+  subset <- df_grouped %>% filter(Category == cat) %>% arrange(Year)
+  first_non_zero_idx <- which(subset$Value != 0)[1]
+  if (!is.na(first_non_zero_idx)) {
+    filtered_list[[cat]] <- subset[first_non_zero_idx:nrow(subset), ]
+  }
+}
+
+df_filtered <- bind_rows(filtered_list)
+
+average_per_year <- df_filtered %>%
+  group_by(Year) %>%
+  summarise(Category = "Average", Value = mean(Value, na.rm = TRUE), .groups = "drop")
+
+plot_data <- bind_rows(df_filtered, average_per_year)
+
+ggplot(plot_data, aes(x = Year, y = Value, color = Category, group = Category)) +
+  geom_line(linewidth = 1) +
+  scale_color_viridis_d(option = "turbo") +
+  labs(
+    title = "Physical Trade Balance in Romania by Category",
+    x = "Year",
+    y = "Value (tens of mt)",
+    color = "Category"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "top",
+    legend.key.size = unit(0.2, "cm"),
+    legend.text = element_text(size = 6),
+    legend.title = element_text(size = 5),
+    legend.box.spacing = unit(0.0, "cm"),
+    legend.spacing.x = unit(0.0, "cm"),
+    legend.spacing.y = unit(0.0, "cm"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  guides(color = guide_legend(ncol = 2))
 ```
