@@ -127,21 +127,7 @@ plot_flow_category <- function(data, flow, category, years, ylabel=FALSE, debug=
 ### 2.1 Filtering functions
 
 ```{r}
-filter_minerals <- function(data, flow_name, category, year = 2023) {
-  year <- fix_years_col(year)
-  cols_to_select <- c("Country", year)
-  data_filtered <- data %>%
-    filter(Category==category, Flow.name==flow_name) %>%
-    select(cols_to_select) %>%
-    dplyr::rename(c(Minerals=year)) %>%
-    drop_na()
-  
-  return(data_filtered)
-}
-```
-
-```{r}
-filter_minerals_generic <- function(data, flow_name="", category="", years=c()) {
+filter_minerals <- function(data, flow_name="", category="", years=c()) {
   years <- fix_years_col(years)
   cols_to_select <- c("Country", "Category", "Flow.name", years)
 
@@ -327,78 +313,19 @@ domains
 ## 2.6 Map plotting helper functions
 
 ```{r}
-plot_map_static <- function(data, year) {
-  # Load shapefile
-  shapefile_path <- "map/ne_110m_admin_0_countries.shp"
-  world <- st_read(shapefile_path, quiet = TRUE)
-  
-  # Merge the data with the shapefile
-  world_data <- world %>%
-    left_join(data, by = c("NAME" = "Country"))
-  
-  # Create the plot
-  ggplot(data = world_data) +
-    geom_sf(aes(fill = year), color = "black", size = 0.2) +
-    scale_fill_distiller(palette = "RdBu", direction = 1, na.value = "gray90") +
-    theme_minimal() +
-    labs(title = "World Map with Values per Country", fill = year) +
-    theme(axis.text = element_blank(),
-          axis.ticks = element_blank(),
-          panel.grid = element_blank())
-}
-```
 
-```{r}
-
-plot_map <- function(data, column = "Minerals", title = "", wh = "100x100") {
-  year <- names(data)[2]
-  geo_json_path <- "map/folium/world-countries.json"
-  
-  geo_json_data <- geojson_read(geo_json_path, what = "sp")
-  
-  dims <- strsplit(wh, "x")[[1]]
-  width <- paste0(dims[1], "%")
-  height <- paste0(dims[2], "%")
-  
-  geo_json_data@data <- geo_json_data@data %>% left_join(data, by = c(name="Country"))
-  
-  pal <- colorNumeric("YlOrRd", domain = geo_json_data@data[[column]], na.color = "transparent")
-  m <- leaflet(geo_json_data) %>%
-       addTiles() %>%
-       addPolygons(
-         fillColor = ~pal(get(column)),
-         weight = 0.3,
-         opacity = 1,
-         color = "black",
-         fillOpacity = 0.7,
-         highlight = highlightOptions(
-           weight = 2, color = "black", fillOpacity = 0.8, bringToFront = TRUE
-         ),
-         label = ~paste0(name, ": ", get(column)),
-         labelOptions = labelOptions(direction = "auto")
-       ) %>%
-       addLegend(pal = pal, values = ~get(column), title = "Value per Country")
-  if (title != "") {
-    title_html <- tags$div(
-      HTML(paste0("<h1 style='position:absolute;z-index:1000;left:40vw'>", title, "</h1>"))
-    )
-    m <- htmlwidgets::prependContent(m, title_html)
-  }
-  
-  m
-}
-```
-
-```{r}
-
-plot_with_slider <- function(data, flow_name, category) {
+plot_minerals_with_slider <- function(data, flow_name, category) {
   columns_to_ignore <- c("Flow.code", "Flow.unit")
   df_filtered <- data %>%
                   select(-one_of(columns_to_ignore)) %>%
                   filter(Flow.name==flow_name,Category==category)
   
   df_melted <- df_filtered %>%
-               pivot_longer(cols = -c("Country", "Category", "Flow.name"), names_to = "Year", values_to = "Value")
+               pivot_longer(
+                  cols = -c("Country", "Category", "Flow.name"), 
+                  names_to = "Year", 
+                  values_to = "Value"
+                )
 
   geo_json_path <- "map/folium/world-countries.json"
   geo_json <- st_read(geo_json_path, quiet=TRUE)
@@ -432,13 +359,18 @@ plot_with_slider <- function(data, flow_name, category) {
             weight = 2, color = "#666", fillOpacity = 0.8, bringToFront = TRUE
           )
         ) %>%
-        addLegend(pal = pal, values = geo_data$Value, title = paste(category, flow_name, year, " "))
+        addLegend(
+          pal = pal, 
+          values = geo_data$Value, 
+          title = paste(category, flow_name, year, " "))
     },
-    year = mwSlider(min_year_numeric,
-                  max_year_numeric,
-                  step = 1,
-                  value = 2020,
-                  label = "Year")
+    year = mwSlider(
+              min_year_numeric,
+              max_year_numeric,
+              step = 1,
+              value = 2020,
+              label = "Year"
+          )
   )
 }
 ```
@@ -475,16 +407,25 @@ plot_wellbeing_with_slider <- function(data, title="") {
           fillOpacity = ~Value/max_val,
           label = ~paste(name, ": ", round(Value, 2)),
           highlight = highlightOptions(
-            weight = 2, color = "#666", fillOpacity = 0.8, bringToFront = TRUE
+            weight = 2, 
+            color = "#666", 
+            fillOpacity = 0.8, 
+            bringToFront = TRUE
           )
         ) %>%
-        addLegend(pal = pal, values = geo_data$Value, title = title)
+        addLegend(
+          pal = pal, 
+          values = geo_data$Value, 
+          title = title
+        )
     },
-    year = mwSlider(min_year_numeric,
-                  max_year_numeric,
-                  step = 1,
-                  value = 2020,
-                  label = "Year")
+    year = mwSlider(
+            min_year_numeric,
+            max_year_numeric,
+            step = 1,
+            value = 2020,
+            label = "Year"
+           )
   )
 }
 ```
@@ -523,9 +464,9 @@ ggplot(annual_earnings, aes(x=reorder(Reference.area, -OBS_VALUE), y=OBS_VALUE, 
       x="Country",
       y="Earnings (in USD)"
     ) +
-    theme_minimal(base_size=14) +
+    theme_minimal(base_size=10) +
     theme(
-      axis.text.x = element_text(angle=45, hjust=1),
+      axis.text.x = element_text(angle=90, hjust=1),
       panel.grid.major.y = element_line(linetype="dashed", color="gray80")
     )
 ```
