@@ -502,7 +502,7 @@ years = c(1970, 1997, 2024)
 ### 3.2.1 Univariate Analysis
 
 ```{r}
-annual_earnings <- filter_wellbeing(df_wb, measure="Average annual gross earnings", domain="Work and job quality")
+annual_earnings <- filter_wellbeing(df_wb, measure="Average annual gross earnings", domain="Work and job quality", years=c(2021))
 annual_earnings <- annual_earnings %>% arrange(desc(OBS_VALUE))
 
 annual_earnings
@@ -519,7 +519,7 @@ ggplot(annual_earnings, aes(x=reorder(Reference.area, -OBS_VALUE), y=OBS_VALUE, 
       aesthetics="color"
     ) + 
     labs(
-      title="Average Annual Gross Earnings (2023)",
+      title="Average Annual Gross Earnings (2021)",
       x="Country",
       y="Earnings (in USD)"
     ) +
@@ -737,7 +737,7 @@ plot_df <- merged_df %>%
         pivot_longer(
           cols=-Country,
           names_to="Metric",
-          values_to="Normalized Value"
+          values_to="Normalized.Value"
         )
 
 avg_life <- mean(merged_df$`Life Satisfaction (norm)`, na.rm=TRUE)
@@ -746,14 +746,12 @@ avg_earn <- mean(merged_df$`Average Earnings (norm)`, na.rm=TRUE)
 average_data <- data.frame(
   Country = c("Average", "Average"),
   Metric = c("Life Satisfaction (norm)", "Average Earnings (norm)"),
-  `Normalized Value` = c(avg_life, avg_earn)
+  "Normalized.Value" = c(avg_life, avg_earn)
 )
 
-plot_df <- bind_rows(plot_df, average_data)
+plot_df <- rbind(plot_df, average_data)
 
-plot_df$Country <- factor(plot_df$Country, levels=c(country_order, "Average"))
-
-ggplot(plot_df, aes(x=Country, y=`Normalized Value`, fill=Metric)) +
+ggplot(plot_df, aes(x=Country, y=`Normalized.Value`, fill=Metric)) +
       geom_bar(stat="identity", position="dodge") +
       labs(
         title="Normalized Life Satisfaction vs Average Earnings by Country",
@@ -763,9 +761,17 @@ ggplot(plot_df, aes(x=Country, y=`Normalized Value`, fill=Metric)) +
       scale_fill_brewer(palette="Set2") +
       theme_minimal(base_size=12) +
       theme(
-        axis.text.x = element_text(angle=45, hjust=1),
-        plot.title = element_text(hjust=0.5)
-      )
+        legend.position = "top",
+        legend.key.size = unit(0.2, "cm"),
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 5),
+        legend.box.spacing = unit(0.0, "cm"),
+        legend.spacing.x = unit(0.0, "cm"),
+        legend.spacing.y = unit(0.0, "cm"),
+        axis.text.x = element_text(angle = 90, hjust = 1),
+        plot.title = element_text(hjust = 0.0)
+      ) +
+      guides(color = guide_legend(ncol = 2))
 ```
 
 ```{r}
