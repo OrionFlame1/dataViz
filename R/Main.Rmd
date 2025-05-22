@@ -443,12 +443,17 @@ years = c(1970, 1997, 2024)
 ### 3.2.1 Univariate Analysis
 
 ```{r}
-annual_earnings <- filter_wellbeing(df_wb, measure="Average annual gross earnings", domain="Work and job quality", years=c(2021))
-annual_earnings <- annual_earnings %>% arrange(desc(OBS_VALUE))
+annual_earnings <- filter_wellbeing(
+                    df_wb, 
+                    measure="Average annual gross earnings", 
+                    domain="Work and job quality", 
+                    years=c(2021)
+                  )
 
-annual_earnings
-
-ggplot(annual_earnings, aes(x=reorder(Reference.area, -OBS_VALUE), y=OBS_VALUE, fill=Reference.area)) +
+ggplot(
+      annual_earnings, 
+      aes(x=reorder(Reference.area, -OBS_VALUE), y=OBS_VALUE, fill=Reference.area)
+    ) +
     geom_col(show.legend = FALSE) +
     scale_colour_viridis(
       alpha = 1,
@@ -456,7 +461,7 @@ ggplot(annual_earnings, aes(x=reorder(Reference.area, -OBS_VALUE), y=OBS_VALUE, 
       end = 1,
       direction = 1,
       discrete=FALSE,
-      option="D",
+      option="B",
       aesthetics="color"
     ) + 
     labs(
@@ -466,7 +471,7 @@ ggplot(annual_earnings, aes(x=reorder(Reference.area, -OBS_VALUE), y=OBS_VALUE, 
     ) +
     theme_minimal(base_size=10) +
     theme(
-      axis.text.x = element_text(angle=90, hjust=1),
+      axis.text.x = element_text(angle=90, hjust=1, vjust=0),
       panel.grid.major.y = element_line(linetype="dashed", color="gray80")
     )
 ```
@@ -497,7 +502,7 @@ ggplot(stats_df, aes(x = Statistics, y = Values, fill = Year)) +
     y = "Value (log scale)"
   ) +
   theme_minimal(base_size = 14) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust=0)) +
   geom_hline(yintercept = 1, linetype = "dashed", color = "grey")
 ```
 
@@ -524,7 +529,7 @@ ggplot(avg_value_per_year, aes(x=Year, y=Value, group=1)) +
         y="Average Domestic Extraction (Million tonnes)"
       ) +
       theme_minimal(base_size=14) +
-      theme(axis.text.x = element_text(angle=45, hjust=1))
+      theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0))
 ```
 
 Observation: An analysis of material flow data reveals notable declines in the years 2009 and 2020, coinciding with significant global economic downturns. These patterns underscore the sensitivity of material flows to global economic conditions, highlighting how major crises can lead to substantial reductions in resource extraction and consumption.
@@ -574,8 +579,6 @@ life_satisfaction <- filter_wellbeing(df_wb, measure="Life satisfaction", domain
     rename(c(Country="Reference.area", Year="TIME_PERIOD", Value="OBS_VALUE"))
 domestic_extraction_fossil_fuels <- filter_minerals_generic(df_mr, flow_name="Domestic Extraction", category="Fossil fuels", year=c(2018))
 
-life_satisfaction
-
 merged1 <- merge(life_satisfaction, domestic_extraction_fossil_fuels, by="Country")
 
 min_val <- min(merged1$Minerals, na.rm=TRUE)
@@ -585,7 +588,7 @@ merged1$Minerals_Scaled <- 10 * (merged1$Minerals - min_val) / (max_val - min_va
 
 ggplot(merged1, aes(x=Value, y=Minerals_Scaled, label=Country)) +
     geom_point() +
-    geom_text(vjust=0.5, hjust=0.5, size=3) +
+    geom_text(vjust=1, hjust=0, size=2) +
     labs(
       x="Life satisfaction Rating",
       y="Minerals_Scaled",
@@ -639,7 +642,11 @@ ggplot(pivot_long, aes(x=Country, y=Value, fill=Category)) +
       theme(
         legend.position="right",
         legend.title=element_text(size=10),
-        axis.text.x = element_text(angle=45, hjust=1)
+        legend.key.width = unit(0.3, "cm"),
+        legend.key.height = unit(0.2, "cm"),
+        legend.text = element_text(size = 8),
+        legend.box.spacing = unit(0.0, "cm"),
+        axis.text.x = element_text(angle=45, hjust=1, size=8)
       )
 ```
 
@@ -655,6 +662,8 @@ df_current <- df_current %>%
 
 annual_earnings_for_merge <- annual_earnings %>%
     rename(c(Country="Reference.area", Year="TIME_PERIOD", Value="OBS_VALUE"))
+
+df_current
 
 merged_df <- df_current %>%
     inner_join(annual_earnings_for_merge, by="Country") %>%
@@ -779,7 +788,7 @@ ggplot(df_anomaly, aes(x = Year, y = Value)) +
   ) +
   theme_minimal(base_size = 12) +
   theme(
-    axis.text.x = element_text(angle = 45),
+    axis.text.x = element_text(angle = 90, vjust=0, hjust=0),
     plot.title = element_text(hjust = 0.5)
   )
 ```
