@@ -549,35 +549,33 @@ plot_flow_category(df_mr, flow="Exports", category = "Metal ores", years=years)
 Observation: Above it is displayed a plot about the major countries that export metal ores, on the same 3 year landmarks
 
 ```{r}
-plot_with_slider(df_mr, "Domestic Extraction", "Fossil fuels")
-```
-
-```{r}
-plot_with_slider(df_mr, flow_name = "Imports", category = "Metal ores")
 
 ```
 
 ```{r}
-plot_with_slider(df_mr, flow_name = "Exports", category = "Metal ores")
+
 ```
 
 ```{r}
-plot_with_slider(df_mr, flow_name = "Exports", category = "Fossil fuels")
+
+```
+
+```{r}
+
 ```
 
 ```{r}
 df_employment_rate = filter_wellbeing(df_wb, measure="Employment rate", domain="Work and job quality", years=c())
-plot_wellbeing_with_slider(df_employment_rate)
 ```
 
 ```{r}
-plot_with_slider(df_mr, flow_name="Material Footprint (RMC)", category = "Biomass")
+
 ```
 
 ```{r}
 life_satisfaction <- filter_wellbeing(df_wb, measure="Life satisfaction", domain="Subjective well-being", years=c(2018)) %>%
     rename(c(Country="Reference.area", Year="TIME_PERIOD", Value="OBS_VALUE"))
-domestic_extraction_fossil_fuels <- filter_minerals_generic(df_mr, flow_name="Domestic Extraction", category="Fossil fuels", year=c(2018))
+domestic_extraction_fossil_fuels <- filter_minerals(df_mr, flow_name="Domestic Extraction", category="Fossil fuels", year=c(2018))
 
 merged1 <- merge(life_satisfaction, domestic_extraction_fossil_fuels, by="Country")
 
@@ -775,7 +773,7 @@ Observation: Most countries have similar average values across age groups, while
 ## 3.3 Anomalies
 
 ```{r}
-df_mr_transposed <- filter_minerals_generic(df_mr)
+df_mr_transposed <- filter_minerals(df_mr)
 df_anomaly <- df_mr_transposed %>%
   filter(Country == "Russia")
 
@@ -796,7 +794,7 @@ ggplot(df_anomaly, aes(x = Year, y = Value)) +
 Observation: Russian Federation did not report any activity on minerals industry until 1992, this can be related to the collapse of the Soviet Union, along with a descending trend of tonnes, indicating that before the first reports it might have been a greater minerals extraction than reported.
 
 ```{r}
-df_romania_ptb <- filter_minerals_generic(df_mr, flow_name = "Physical Trade Balance", year = c()) %>%
+df_romania_ptb <- filter_minerals(df_mr, flow_name = "Physical Trade Balance", year = c()) %>%
   filter(Country == "Romania")
 
 df_grouped <- df_romania_ptb %>%
